@@ -14,6 +14,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"k8s.io/client-go/util/retry"
 	"os"
 	"path"
 	"path/filepath"
@@ -30,8 +31,8 @@ const (
 
 Usage:
     kyma [options]
-    kyma function init --runtime=<RUNTIME> [options]
-    kyma function apply [options]
+    kyma function init --runtime=<RUNTIME> [--dir=<DIR>] [options]
+    kyma function apply [--dir=<DIR>] [options]
 
 Options:
     --kubeConfig			Path to kube config file.
@@ -50,6 +51,7 @@ type config struct {
 	Function   bool   `docopt:"function" json:"function"`
 	Init       bool   `docopt:"init" json:"init"`
 	Apply      bool   `docopt:"apply" json:"apply"`
+	Dir        string `docopt:"--dir" json:"dir"`
 }
 
 func newConfig() (*config, error) {
@@ -57,11 +59,18 @@ func newConfig() (*config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var cfg config
 	if err = arguments.Bind(&cfg); err != nil {
 		return nil, err
 	}
 
+	if cfg.Dir == "" {
+		cfg.Dir, err = os.Getwd()
+		if err != nil {
+			return nil, err
+		}
+	}
 	return &cfg, nil
 }
 
@@ -101,26 +110,28 @@ func initializeWorkspace(cfg *config) {
 	entry := log.WithField("runtime", cfg.Runtime)
 	entry.Debug("initializing project")
 
-	srcPath := "/tmp/testme"
-	configuration := workspace.Cfg{
-		Runtime:    v1alpha1.Runtime(cfg.Runtime),
-		Name:       "testme",
-		Namespace:  "default",
-		SourcePath: srcPath,
+	if cfg.Name == "" {
+		cfg.Name = path.Base(cfg.Dir)
 	}
 
-	if err := workspace.Initialize(configuration, srcPath); err != nil {
+	configuration := workspace.Cfg{
+		Runtime:    v1alpha1.Runtime(cfg.Runtime),
+		Name:       cfg.Name,
+		Namespace:  "default",
+		SourcePath: cfg.Dir,
+	}
+
+	if err := workspace.Initialize(configuration, cfg.Dir); err != nil {
 		entry.Fatal(err)
 	}
 	entry.Debug("workspace initialized")
 }
 
 func applyFunction(cfg *config) {
-	srcPath := "/tmp/testme"
-	entry := log.WithField("sourcePath", srcPath)
+	entry := log.WithField("sourcePath", cfg.Dir)
 	entry.Debug("opening project")
 
-	file, err := os.Open(path.Join(srcPath, workspace.CfgFilename))
+	file, err := os.Open(path.Join(cfg.Dir, workspace.CfgFilename))
 	if err != nil {
 		entry.Fatal(err)
 	}
@@ -130,7 +141,7 @@ func applyFunction(cfg *config) {
 	if err := json.NewDecoder(file).Decode(&configuration); err != nil {
 		entry.Fatal(err)
 	}
-	configuration.SourcePath = srcPath
+	configuration.SourcePath = cfg.Dir
 
 	client := client(cfg)
 	resourceInterface := client.Resource(groupResourceVersionFunction).Namespace(configuration.Namespace)
@@ -148,7 +159,11 @@ func applyFunction(cfg *config) {
 	}
 
 	// If object is up to date return
-	equal := equality.Semantic.DeepDerivative(response.Object["spec"], obj.Object["spec"])
+	var equal bool
+	if fnFound {
+		equal = equality.Semantic.DeepDerivative(response.Object["spec"], obj.Object["spec"])
+	}
+
 	if fnFound && equal {
 		entry.Debug("object already created and up to date")
 		return
@@ -158,7 +173,11 @@ func applyFunction(cfg *config) {
 	if fnFound && !equal {
 		response.Object["spec"] = obj.Object["spec"]
 		entry.Debug("updating object")
-		_, err := resourceInterface.Update(response, v1.UpdateOptions{})
+		err = retry.RetryOnConflict(retry.DefaultRetry, func() (err error) {
+			_, err = resourceInterface.Update(response, v1.UpdateOptions{})
+			return
+		})
+
 		if err != nil {
 			entry.Fatal(err)
 		}

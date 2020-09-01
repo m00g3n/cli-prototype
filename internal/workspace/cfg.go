@@ -12,7 +12,7 @@ const CfgFilename = "serverless.json"
 
 type Cfg struct {
 	Runtime    v1alpha1.Runtime
-	Git        bool              `json:"git"`
+	Git        bool              `json:"git,omitempty"`
 	Name       string            `json:"name"`
 	Namespace  string            `json:"namespace"`
 	SourcePath string            `json:"-"`
