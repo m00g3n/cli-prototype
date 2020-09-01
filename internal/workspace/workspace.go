@@ -8,6 +8,8 @@ import (
 	"path"
 )
 
+type FileName string
+
 type workspace []file
 
 func (ws workspace) build(cfg Cfg, dirPath string) error {
@@ -66,6 +68,8 @@ func fromRuntime(runtime v1alpha1.Runtime) (workspace, error) {
 	switch runtime {
 	case v1alpha1.Nodejs12, v1alpha1.Nodejs10:
 		return workspaceNodeJs, nil
+	case v1alpha1.Python38:
+		return workspacePython, nil
 	default:
 		return nil, errUnsupportedRuntime
 	}

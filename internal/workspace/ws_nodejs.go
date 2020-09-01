@@ -12,8 +12,6 @@ const packageJSON = `{
   "dependencies": {}
 }`
 
-type FileName string
-
 const (
 	FileNameHandlerJs   FileName = "handler.js"
 	FileNamePackageJSON FileName = "package.json"

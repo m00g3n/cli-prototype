@@ -101,7 +101,7 @@ func initializeWorkspace(cfg *config) {
 
 	srcPath := "/tmp/testme"
 	configuration := workspace.Cfg{
-		Runtime:    v1alpha1.Nodejs12,
+		Runtime:    v1alpha1.Runtime(cfg.Runtime),
 		Name:       "testme",
 		Namespace:  "default",
 		SourcePath: srcPath,
@@ -143,7 +143,6 @@ func applyFunction(cfg *config) {
 		entry.Error(err)
 	}
 	entry.Debug("Creating object:", string(data))
-
 
 	result, err := resourceInterface.Create(&obj, v1.CreateOptions{})
 
