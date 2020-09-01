@@ -9,6 +9,8 @@ import (
 	"github.com/docopt/docopt-go"
 	"gitops/internal/unstructured"
 	"gitops/internal/workspace"
+	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -123,29 +125,56 @@ func applyFunction(cfg *config) {
 		entry.Fatal(err)
 	}
 
+	// Load project configuration
 	var configuration workspace.Cfg
 	if err := json.NewDecoder(file).Decode(&configuration); err != nil {
 		entry.Fatal(err)
 	}
+	configuration.SourcePath = srcPath
 
 	client := client(cfg)
 	resourceInterface := client.Resource(groupResourceVersionFunction).Namespace(configuration.Namespace)
 
-	configuration.SourcePath = srcPath
+	// Check if object exists
+	response, err := resourceInterface.Get(configuration.Name, v1.GetOptions{})
+	fnFound := !errors.IsNotFound(err)
+	if err != nil && fnFound {
+		entry.Fatal(err)
+	}
 
 	obj, err := unstructured.NewFunction(configuration)
 	if err != nil {
 		entry.Fatal(err)
 	}
 
-	data, err := json.Marshal(&obj)
-	if err != nil {
-		entry.Error(err)
+	// If object is up to date return
+	equal := equality.Semantic.DeepDerivative(response.Object["spec"], obj.Object["spec"])
+	if fnFound && equal {
+		entry.Debug("object already created and up to date")
+		return
 	}
-	entry.Debug("Creating object:", string(data))
+
+	// If object needs update
+	if fnFound && !equal {
+		response.Object["spec"] = obj.Object["spec"]
+		entry.Debug("updating object")
+		_, err := resourceInterface.Update(response, v1.UpdateOptions{})
+		if err != nil {
+			entry.Fatal(err)
+		}
+		entry.Debug("object updated")
+		return
+	}
+
+	if log.GetLevel() == log.DebugLevel {
+		data, err := json.Marshal(&obj)
+		if err != nil {
+			entry.Error(err)
+		}
+		entry.Debug("Creating object:", string(data))
+	}
 
 	result, err := resourceInterface.Create(&obj, v1.CreateOptions{})
-
 	if err == nil {
 		entry.Debug("object created:", result)
 		return

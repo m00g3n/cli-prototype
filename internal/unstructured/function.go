@@ -20,10 +20,10 @@ func NewFunction(cfg workspace.Cfg) (unstructured.Unstructured, error) {
 			"name":   cfg.Name,
 			"labels": cfg.Labels,
 		},
-		"spec": map[string]string{},
+		"spec": map[string]interface{}{},
 	}}
 
-	spec := out.Object["spec"].(map[string]string)
+	spec := out.Object["spec"].(map[string]interface{})
 	for key, value := range runtimeMappings[cfg.Runtime] {
 		filePath := path.Join(cfg.SourcePath, string(value))
 		data, err := ioutil.ReadFile(filePath)
