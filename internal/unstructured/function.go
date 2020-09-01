@@ -56,5 +56,9 @@ var (
 			propertySource: workspace.FileNameHandlerJs,
 			propertyDeps:   workspace.FileNamePackageJSON,
 		},
+		v1alpha1.Python38: {
+			propertySource: workspace.FileNameHandlerPy,
+			propertyDeps:   workspace.FileNameRequirementsTxt,
+		},
 	}
 )
