@@ -6,17 +6,23 @@ import (
 	"io"
 )
 
-var _ File = &Cfg{}
+var _ file = &Cfg{}
+
+const CfgFilename = "serverless.json"
 
 type Cfg struct {
-	Runtime       v1alpha1.Runtime
-	WorkspaceName string `json:"name"`
+	Runtime    v1alpha1.Runtime
+	Git        bool              `json:"git"`
+	Name       string            `json:"name"`
+	Namespace  string            `json:"namespace"`
+	SourcePath string            `json:"-"`
+	Labels     map[string]string `json:"labels,omitempty"`
 }
 
-func (c Cfg) Generate(writer io.Writer, cfg Cfg) error {
+func (cfg Cfg) write(writer io.Writer, _ interface{}) error {
 	return json.NewEncoder(writer).Encode(&cfg)
 }
 
-func (c Cfg) Name() string {
-	return "serverless.yaml"
+func (cfg Cfg) fileName() string {
+	return CfgFilename
 }

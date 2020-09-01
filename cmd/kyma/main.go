@@ -5,17 +5,20 @@
 package main
 
 import (
+	"encoding/json"
 	"github.com/docopt/docopt-go"
+	"gitops/internal/unstructured"
 	"gitops/internal/workspace"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
+	"os"
+	"path"
 	"path/filepath"
 
 	log "github.com/sirupsen/logrus"
 
 	"github.com/kyma-project/kyma/components/function-controller/pkg/apis/serverless/v1alpha1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 )
@@ -26,7 +29,7 @@ const (
 Usage:
     kyma [options]
     kyma function init --runtime=<RUNTIME> [options]
-	kyma function apply
+    kyma function apply [options]
 
 Options:
     --kubeConfig			Path to kube config file.
@@ -60,25 +63,10 @@ func newConfig() (*config, error) {
 	return &cfg, nil
 }
 
-type createUnstructured func() (unstructured.Unstructured, error)
-
 var groupResourceVersionFunction = schema.GroupVersionResource{
 	Group:    "serverless.kyma-project.io",
 	Version:  "v1alpha1",
 	Resource: "functions"}
-
-func createFunction() (unstructured.Unstructured, error) {
-	fn := v1alpha1.Function{}
-	unstructuredFn, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&fn)
-	if err != nil {
-		return unstructured.Unstructured{}, err
-	}
-	return unstructured.Unstructured{Object: unstructuredFn}, nil
-}
-
-func createTrigger() (unstructured.Unstructured, error) {
-	panic("not implemented yet")
-}
 
 func client(cfg *config) dynamic.Interface {
 	home := homedir.HomeDir()
@@ -111,15 +99,60 @@ func initializeWorkspace(cfg *config) {
 	entry := log.WithField("runtime", cfg.Runtime)
 	entry.Debug("initializing project")
 
+	srcPath := "/tmp/testme"
 	configuration := workspace.Cfg{
-		Runtime:       v1alpha1.Nodejs12,
-		WorkspaceName: "dupa123",
+		Runtime:    v1alpha1.Nodejs12,
+		Name:       "testme",
+		Namespace:  "default",
+		SourcePath: srcPath,
 	}
 
-	if err := workspace.Initialize(configuration, "/tmp/testme"); err != nil {
+	if err := workspace.Initialize(configuration, srcPath); err != nil {
 		entry.Fatal(err)
 	}
 	entry.Debug("workspace initialized")
+}
+
+func applyFunction(cfg *config) {
+	srcPath := "/tmp/testme"
+	entry := log.WithField("sourcePath", srcPath)
+	entry.Debug("opening project")
+
+	file, err := os.Open(path.Join(srcPath, workspace.CfgFilename))
+	if err != nil {
+		entry.Fatal(err)
+	}
+
+	var configuration workspace.Cfg
+	if err := json.NewDecoder(file).Decode(&configuration); err != nil {
+		entry.Fatal(err)
+	}
+
+	client := client(cfg)
+	resourceInterface := client.Resource(groupResourceVersionFunction).Namespace(configuration.Namespace)
+
+	configuration.SourcePath = srcPath
+
+	obj, err := unstructured.NewFunction(configuration)
+	if err != nil {
+		entry.Fatal(err)
+	}
+
+	data, err := json.Marshal(&obj)
+	if err != nil {
+		entry.Error(err)
+	}
+	entry.Debug("Creating object:", string(data))
+
+
+	result, err := resourceInterface.Create(&obj, v1.CreateOptions{})
+
+	if err == nil {
+		entry.Debug("object created:", result)
+		return
+	}
+
+	entry.Fatal(err)
 }
 
 func main() {
@@ -135,5 +168,9 @@ func main() {
 
 	if cfg.Init {
 		initializeWorkspace(cfg)
+	}
+
+	if cfg.Apply {
+		applyFunction(cfg)
 	}
 }

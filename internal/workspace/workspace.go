@@ -8,7 +8,7 @@ import (
 	"path"
 )
 
-type workspace []File
+type workspace []file
 
 func (ws workspace) build(cfg Cfg, dirPath string) error {
 	workspaceFiles := append(ws, cfg)
@@ -20,12 +20,12 @@ func (ws workspace) build(cfg Cfg, dirPath string) error {
 	return nil
 }
 
-func write(destinationPath string, fileTemplate File, cfg Cfg) error {
-	outFilePath := path.Join(destinationPath, fileTemplate.Name())
+func write(destinationDirPath string, fileTemplate file, cfg Cfg) error {
+	outFilePath := path.Join(destinationDirPath, fileTemplate.fileName())
 
 	entry := log.WithFields(map[string]interface{}{
 		"outputFileName": outFilePath,
-		"workspaceName":  cfg.WorkspaceName,
+		"workspaceName":  cfg.fileName,
 	})
 
 	entry.Debug("creating output file")
@@ -43,7 +43,7 @@ func write(destinationPath string, fileTemplate File, cfg Cfg) error {
 	entry.Debug("file created")
 
 	entry.Debug("generating content")
-	err = fileTemplate.Generate(file, cfg)
+	err = fileTemplate.write(file, cfg)
 	if err != nil {
 		return err
 	}
@@ -55,10 +55,18 @@ func write(destinationPath string, fileTemplate File, cfg Cfg) error {
 var errUnsupportedRuntime = errors.New("unsupported runtime")
 
 func Initialize(cfg Cfg, dirPath string) error {
-	switch cfg.Runtime {
-	case v1alpha1.Nodejs12:
-		return nodeJS12.build(cfg, dirPath)
+	ws, err := fromRuntime(cfg.Runtime)
+	if err != nil {
+		return err
+	}
+	return ws.build(cfg, dirPath)
+}
+
+func fromRuntime(runtime v1alpha1.Runtime) (workspace, error) {
+	switch runtime {
+	case v1alpha1.Nodejs12, v1alpha1.Nodejs10:
+		return workspaceNodeJs, nil
 	default:
-		return errUnsupportedRuntime
+		return nil, errUnsupportedRuntime
 	}
 }
