@@ -11,7 +11,7 @@ var _ file = &Cfg{}
 const CfgFilename = "serverless.json"
 
 type Cfg struct {
-	Runtime    v1alpha1.Runtime
+	Runtime    v1alpha1.Runtime  `json:"runtime" jsonschema:"enum=nodejs10,enum=nodejs12,enum=python38"`
 	Git        bool              `json:"git,omitempty"`
 	Name       string            `json:"name"`
 	Namespace  string            `json:"namespace"`

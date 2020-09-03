@@ -3,6 +3,7 @@ module gitops
 go 1.14
 
 require (
+	github.com/alecthomas/jsonschema v0.0.0-20200530073317-71f438968921
 	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
 	github.com/evanphx/json-patch v4.5.0+incompatible // indirect
 	github.com/kyma-project/kyma/components/function-controller v0.0.0-20200827102145-95e3dfe71d80
